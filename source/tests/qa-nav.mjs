@@ -1,0 +1,51 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch()
+let fails = 0
+const check = (name, ok) => { console.log((ok ? 'PASS' : 'FAIL') + ' ' + name); if (!ok) fails++ }
+
+// Desktop 1280
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 950 } })
+const page = await ctx.newPage()
+await page.goto('http://localhost:4173/#home', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1800)
+const header = await page.evaluate(() => document.querySelector('header').innerText)
+check('Navbar: AI Assistant item hai', header.includes('AI Assistant'))
+check('Navbar: Search button gaya', !/Search|Ctrl\+K/.test(header))
+await page.getByRole('button', { name: 'AI Assistant' }).first().click()
+await page.waitForTimeout(1200)
+check('AI Assistant click: #ai page khula', page.url().includes('#ai'))
+const body = await page.evaluate(() => document.body.innerText)
+check('AI page: naam Budget Samjho hai', body.includes('Budget Samjho - AI Budget Assistant'))
+check('AI page: Paise Samjho kahin nahi', !body.includes('Paise Samjho'))
+
+// Images alag files se load hoti hain (speed fix)
+await page.goto('http://localhost:4173/#home', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+const heroOk = await page.evaluate(() => [...document.images].some(i => i.src.includes('/assets/hero-') && i.naturalWidth > 0))
+check('Home: hero photo load hui', heroOk)
+await page.goto('http://localhost:4173/#work', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+const projOk = await page.evaluate(() => [...document.images].some(i => i.src.includes('/assets/proj-') && i.naturalWidth > 0))
+check('Our Work: project photo load hui', projOk)
+const logoOk = await page.evaluate(() => { const l = document.querySelector('header img'); return l && l.src.includes('/assets/logo.svg') && l.naturalWidth > 0 })
+check('Navbar logo load hua', logoOk)
+await ctx.close()
+
+// Mobile 390: drawer me AI Assistant
+const ctx2 = await browser.newContext({ viewport: { width: 390, height: 850 } })
+const p2 = await ctx2.newPage()
+await p2.goto('http://localhost:4173/#home', { waitUntil: 'networkidle' })
+await p2.waitForTimeout(1500)
+await p2.getByRole('button', { name: 'Menu' }).click()
+await p2.waitForTimeout(600)
+const drawer = await p2.evaluate(() => document.querySelector('header').innerText)
+check('Mobile drawer: AI Assistant hai', drawer.includes('AI Assistant'))
+check('Mobile drawer: Search nahi hai', !drawer.includes('Search'))
+await p2.locator('header nav button', { hasText: 'AI Assistant' }).click()
+await p2.waitForTimeout(1000)
+check('Drawer se AI page khula', p2.url().includes('#ai'))
+await ctx2.close()
+
+await browser.close()
+console.log(fails === 0 ? 'ALL PASS' : fails + ' FAILURES')
+process.exit(fails ? 1 : 0)

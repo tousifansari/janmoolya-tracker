@@ -1,0 +1,53 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch()
+const page = await (await browser.newContext({ viewport: { width: 1280, height: 950 } })).newPage()
+let fails = 0
+const check = (name, ok) => { console.log((ok ? 'PASS' : 'FAIL') + ' ' + name); if (!ok) fails++ }
+// --- Vote gating on Tracker ---
+await page.goto('http://localhost:4173/#projects', { waitUntil: 'networkidle' })
+await page.waitForTimeout(2500)
+const cards = await page.evaluate(() => [...document.querySelectorAll('article')].map(a => a.innerText))
+const mg = cards.find(c => c.includes('MG Road')) || ''
+const toilet = cards.find(c => c.includes('Toilet Complex')) || ''
+check('In Progress (MG Road) par vote button NAHI hai', !mg.includes('Haan •') && !mg.includes('Yes •'))
+check('In Progress par note hai: Voting opens when Admin marks Completed', mg.includes('Voting opens'))
+check('Completed (Toilet) par vote button HAI', toilet.includes('Haan •') || toilet.includes('Yes •'))
+// --- Admin: Add Project rupees hint + publish ---
+await page.goto('http://localhost:4173/#admin', { waitUntil: 'networkidle' })
+await page.evaluate(() => sessionStorage.setItem('jmt_admin_ok', '1'))
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+await page.getByRole('button', { name: /Add Project/ }).first().click()
+await page.waitForTimeout(600)
+const form = page.locator('form').first()
+await form.locator('input').first().fill('UI Test Streetlight Project')
+await page.getByPlaceholder('e.g. 20000').fill('20000')
+await page.waitForTimeout(300)
+let body = await page.evaluate(() => document.body.innerText)
+check('Approved hint dikha: = Rs 20,000', body.includes('= ₹20,000'))
+await page.getByPlaceholder('e.g. 5000').fill('500000')
+await page.waitForTimeout(300)
+body = await page.evaluate(() => document.body.innerText)
+check('Spent hint dikha: = Rs 5 Lakh', body.includes('= ₹5 Lakh'))
+await page.getByRole('button', { name: /Publish Project|Project Publish/ }).click()
+await page.waitForTimeout(800)
+body = await page.evaluate(() => document.body.innerText)
+check('Project publish hua', body.includes('publish ho gaya') || body.includes('published to the Project Tracker'))
+await page.goto('http://localhost:4173/#projects', { waitUntil: 'networkidle' })
+await page.waitForTimeout(2000)
+const cards2 = await page.evaluate(() => [...document.querySelectorAll('article')].map(a => a.innerText))
+const mine = cards2.find(c => c.includes('UI Test Streetlight')) || ''
+check('Tracker par naya project Rs 20,000 ke saath dikha', mine.includes('₹20,000'))
+check('Tracker par galat Cr NAHI dikha', !mine.includes('₹200'))
+// --- Admin: City Budget rupees hint ---
+await page.goto('http://localhost:4173/#admin', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+await page.getByRole('button', { name: /City Budget/ }).first().click()
+await page.waitForTimeout(600)
+await page.getByPlaceholder('e.g. 81749400000').fill('50000000')
+await page.waitForTimeout(300)
+body = await page.evaluate(() => document.body.innerText)
+check('City income hint: = Rs 5.00 Cr', body.includes('= ₹5.00 Cr'))
+console.log(fails === 0 ? 'ALL UI FIX TESTS PASS' : fails + ' UI TESTS FAILED')
+await browser.close()
+process.exit(fails ? 1 : 0)
